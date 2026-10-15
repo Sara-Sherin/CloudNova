@@ -11,7 +11,7 @@ app.get('/', (req, res) => {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="description" content="CloudNova - Node.js, Docker, Jenkins and AWS deployment project">
-<title>CloudNova | Cloud & DevOps</title>
+<title>CloudNovas | Cloud & DevOps</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html{scroll-behavior:smooth}
