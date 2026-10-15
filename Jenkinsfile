@@ -62,13 +62,22 @@ pipeline {
                         passwordVariable: 'DOCKERHUB_TOKEN'
                     )
                 ]) {
-                    bat '''
-                        @echo off
-                        docker logout
-                        echo %DOCKERHUB_TOKEN% | docker login --username "%DOCKERHUB_USER%" --password-stdin
-                        if errorlevel 1 exit /b 1
-                        docker push %DOCKER_IMAGE%
-                        if errorlevel 1 exit /b 1
+                    powershell '''
+                        $ErrorActionPreference = "Stop"
+
+                        $env:DOCKERHUB_TOKEN |
+                            docker login --username $env:DOCKERHUB_USER --password-stdin
+
+                        if ($LASTEXITCODE -ne 0) {
+                            throw "Docker Hub login failed."
+                        }
+
+                        docker push $env:DOCKER_IMAGE
+
+                        if ($LASTEXITCODE -ne 0) {
+                            throw "Docker Hub image push failed."
+                        }
+
                         docker logout
                     '''
                 }
