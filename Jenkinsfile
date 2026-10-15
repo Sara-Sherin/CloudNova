@@ -37,7 +37,7 @@ pipeline {
             steps {
                 withCredentials([
                     usernamePassword(
-                        credentialsId: 'cloudnova-dockerhub-2',
+                        credentialsId: 'cloudnova-dockerhub-21',
                         usernameVariable: 'DOCKERHUB_USER',
                         passwordVariable: 'DOCKERHUB_TOKEN'
                     )
@@ -65,7 +65,7 @@ pipeline {
             steps {
                 withCredentials([
                     usernamePassword(
-                        credentialsId: 'cloudnova-dockerhub-2',
+                        credentialsId: 'cloudnova-dockerhub-21',
                         usernameVariable: 'DOCKERHUB_USER',
                         passwordVariable: 'DOCKERHUB_TOKEN'
                     )
