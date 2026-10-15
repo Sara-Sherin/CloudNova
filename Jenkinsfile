@@ -1,4 +1,3 @@
-
 pipeline {
     agent any
 
@@ -38,16 +37,25 @@ pipeline {
             steps {
                 withCredentials([
                     usernamePassword(
-                        credentialsId: 'dockerhub-creds',
+                        credentialsId: 'cloudnova-dockerhub-2',
                         usernameVariable: 'DOCKERHUB_USER',
                         passwordVariable: 'DOCKERHUB_TOKEN'
                     )
                 ]) {
-                    bat '''
-                        @echo off
-                        if "%DOCKERHUB_USER%"=="" exit /b 1
-                        if "%DOCKERHUB_TOKEN%"=="" exit /b 1
-                        echo Docker Hub credentials are available.
+                    powershell '''
+                        if ($env:DOCKERHUB_USER -ne "sara567") {
+                            throw "Docker Hub username does not match."
+                        }
+
+                        if ([string]::IsNullOrWhiteSpace($env:DOCKERHUB_TOKEN)) {
+                            throw "Docker Hub token is missing."
+                        }
+
+                        if ($env:DOCKERHUB_TOKEN -ne $env:DOCKERHUB_TOKEN.Trim()) {
+                            throw "Docker Hub token has leading or trailing whitespace."
+                        }
+
+                        Write-Output "Docker Hub credential checks passed."
                     '''
                 }
             }
@@ -100,6 +108,8 @@ pipeline {
                 bat '''
                     @echo off
                     docker ps --filter "name=%CONTAINER_NAME%"
+                    curl.exe -f http://localhost:3002/health
+                    if errorlevel 1 exit /b 1
                     echo Website: http://localhost:3002
                     echo Health endpoint: http://localhost:3002/health
                 '''
