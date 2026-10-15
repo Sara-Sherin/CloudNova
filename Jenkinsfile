@@ -46,9 +46,22 @@ pipeline {
                     powershell '''
                         $ErrorActionPreference = "Stop"
 
+                        $keyPath = $env:SSH_KEY
+
+                        # Restrict access to the temporary private key.
+                        & icacls $keyPath /inheritance:r
+                        if ($LASTEXITCODE -ne 0) {
+                            throw "Failed to remove inherited key permissions."
+                        }
+
+                        & icacls $keyPath /grant:r "SYSTEM:(R)"
+                        if ($LASTEXITCODE -ne 0) {
+                            throw "Failed to grant SYSTEM read permission."
+                        }
+
                         $remoteCommand = "set -e; cd /home/ubuntu/cloudnova; git pull --ff-only origin main; docker build -t cloudnova:1.0 .; docker rm -f cloudnova >/dev/null 2>&1 || true; docker run -d --name cloudnova --restart unless-stopped -p 3000:3000 cloudnova:1.0; sleep 2; curl -fsS http://localhost:3000/health"
 
-                        & ssh -i $env:SSH_KEY `
+                        & ssh -i $keyPath `
                             -o StrictHostKeyChecking=accept-new `
                             "$($env:SSH_USER)@$($env:EC2_HOST)" `
                             $remoteCommand
@@ -73,7 +86,19 @@ pipeline {
                     powershell '''
                         $ErrorActionPreference = "Stop"
 
-                        & ssh -i $env:SSH_KEY `
+                        $keyPath = $env:SSH_KEY
+
+                        & icacls $keyPath /inheritance:r
+                        if ($LASTEXITCODE -ne 0) {
+                            throw "Failed to remove inherited key permissions."
+                        }
+
+                        & icacls $keyPath /grant:r "SYSTEM:(R)"
+                        if ($LASTEXITCODE -ne 0) {
+                            throw "Failed to grant SYSTEM read permission."
+                        }
+
+                        & ssh -i $keyPath `
                             -o StrictHostKeyChecking=accept-new `
                             "$($env:SSH_USER)@$($env:EC2_HOST)" `
                             "curl -fsS http://localhost:3000/health"
@@ -89,11 +114,13 @@ pipeline {
 
     post {
         success {
-            echo 'CloudNova successfully deployed to AWS EC2 via SSH.'
+            echo 'SUCCESS: CloudNova deployed and verified on AWS EC2.'
         }
+
         failure {
-            echo 'CloudNova pipeline failed. Check Console Output.'
+            echo 'FAILED: Check Console Output for the exact error.'
         }
+
         always {
             echo 'CloudNova CI/CD pipeline finished.'
         }
