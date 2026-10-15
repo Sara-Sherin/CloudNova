@@ -1,10 +1,12 @@
+
 pipeline {
     agent any
 
     environment {
-        DOCKER_IMAGE = 'sara567/cloudnova:1.0'
-        LOCAL_IMAGE = 'cloudnova:1.0'
-        CONTAINER_NAME = 'cloudnova-deployed'
+        EC2_HOST = '3.110.209.94'
+        REMOTE_DIR = '/home/ubuntu/cloudnova'
+        REMOTE_IMAGE = 'cloudnova:1.0'
+        REMOTE_CONTAINER = 'cloudnova'
     }
 
     stages {
@@ -28,98 +30,66 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                bat 'docker build -t %LOCAL_IMAGE% .'
-                bat 'docker tag %LOCAL_IMAGE% %DOCKER_IMAGE%'
+                bat 'docker build -t cloudnova:1.0 .'
             }
         }
 
-        stage('Verify Docker Hub Credentials') {
+        stage('Deploy to AWS EC2 via SSH') {
             steps {
                 withCredentials([
-                    usernamePassword(
-                        credentialsId: 'cloudnova-dockerhub-21',
-                        usernameVariable: 'DOCKERHUB_USER',
-                        passwordVariable: 'DOCKERHUB_TOKEN'
-                    )
-                ]) {
-                    powershell '''
-                        if ($env:DOCKERHUB_USER -ne "sara567") {
-                            throw "Docker Hub username does not match."
-                        }
-
-                        if ([string]::IsNullOrWhiteSpace($env:DOCKERHUB_TOKEN)) {
-                            throw "Docker Hub token is missing."
-                        }
-
-                        if ($env:DOCKERHUB_TOKEN -ne $env:DOCKERHUB_TOKEN.Trim()) {
-                            throw "Docker Hub token has leading or trailing whitespace."
-                        }
-
-                        Write-Output "Docker Hub credential checks passed."
-                    '''
-                }
-            }
-        }
-
-        stage('Push to Docker Hub') {
-            steps {
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'cloudnova-dockerhub-21',
-                        usernameVariable: 'DOCKERHUB_USER',
-                        passwordVariable: 'DOCKERHUB_TOKEN'
+                    sshUserPrivateKey(
+                        credentialsId: 'cloudnova-ec2',
+                        keyFileVariable: 'SSH_KEY',
+                        usernameVariable: 'SSH_USER'
                     )
                 ]) {
                     powershell '''
                         $ErrorActionPreference = "Stop"
 
-                        $env:DOCKERHUB_TOKEN |
-                            docker login --username $env:DOCKERHUB_USER --password-stdin
+                        $remoteCommand = "set -e; cd /home/ubuntu/cloudnova; git pull --ff-only origin main; docker build -t cloudnova:1.0 .; docker rm -f cloudnova >/dev/null 2>&1 || true; docker run -d --name cloudnova --restart unless-stopped -p 3000:3000 cloudnova:1.0; sleep 2; curl -fsS http://localhost:3000/health"
+
+                        & ssh -i $env:SSH_KEY `
+                            -o StrictHostKeyChecking=accept-new `
+                            "$($env:SSH_USER)@$($env:EC2_HOST)" `
+                            $remoteCommand
 
                         if ($LASTEXITCODE -ne 0) {
-                            throw "Docker Hub login failed."
+                            throw "AWS EC2 deployment failed."
                         }
-
-                        docker push $env:DOCKER_IMAGE
-
-                        if ($LASTEXITCODE -ne 0) {
-                            throw "Docker Hub image push failed."
-                        }
-
-                        docker logout
                     '''
                 }
             }
         }
 
-        stage('Deploy Container') {
+        stage('Verify AWS Deployment') {
             steps {
-                bat '''
-                    @echo off
-                    docker rm -f %CONTAINER_NAME% 2>NUL
-                    docker run -d --name %CONTAINER_NAME% --restart unless-stopped -p 3002:3000 %DOCKER_IMAGE%
-                    if errorlevel 1 exit /b 1
-                '''
-            }
-        }
+                withCredentials([
+                    sshUserPrivateKey(
+                        credentialsId: 'cloudnova-ec2',
+                        keyFileVariable: 'SSH_KEY',
+                        usernameVariable: 'SSH_USER'
+                    )
+                ]) {
+                    powershell '''
+                        $ErrorActionPreference = "Stop"
 
-        stage('Verify Deployment') {
-            steps {
-                bat '''
-                    @echo off
-                    docker ps --filter "name=%CONTAINER_NAME%"
-                    curl.exe -f http://localhost:3002/health
-                    if errorlevel 1 exit /b 1
-                    echo Website: http://localhost:3002
-                    echo Health endpoint: http://localhost:3002/health
-                '''
+                        & ssh -i $env:SSH_KEY `
+                            -o StrictHostKeyChecking=accept-new `
+                            "$($env:SSH_USER)@$($env:EC2_HOST)" `
+                            "curl -fsS http://localhost:3000/health"
+
+                        if ($LASTEXITCODE -ne 0) {
+                            throw "AWS health check failed."
+                        }
+                    '''
+                }
             }
         }
     }
 
     post {
         success {
-            echo 'CloudNova pipeline completed successfully.'
+            echo 'CloudNova successfully deployed to AWS EC2 via SSH.'
         }
         failure {
             echo 'CloudNova pipeline failed. Check Console Output.'
