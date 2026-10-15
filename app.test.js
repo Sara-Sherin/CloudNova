@@ -6,7 +6,7 @@ describe('CloudNova application', () => {
   test('homepage should load successfully', async () => {
     const response = await request(app).get('/');
 
-    expect(response.statusCode).toBe(500);
+    expect(response.statusCode).toBe(200);
     expect(response.text).toContain('CloudNova');
   });
 
