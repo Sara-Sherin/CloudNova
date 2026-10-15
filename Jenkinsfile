@@ -1,39 +1,34 @@
-```groovy
+
 pipeline {
     agent any
 
     environment {
         DOCKER_IMAGE = 'sara567/cloudnova:1.0'
-        LOCAL_IMAGE  = 'cloudnova:1.0'
+        LOCAL_IMAGE = 'cloudnova:1.0'
         CONTAINER_NAME = 'cloudnova-deployed'
     }
 
     stages {
-
         stage('Checkout') {
             steps {
-                echo 'Checking out CloudNova source code...'
                 checkout scm
             }
         }
 
         stage('Install Dependencies') {
             steps {
-                echo 'Installing Node.js dependencies...'
                 bat 'npm ci'
             }
         }
 
         stage('Run Jest Tests') {
             steps {
-                echo 'Running application tests...'
                 bat 'npm test'
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                echo 'Building the CloudNova Docker image...'
                 bat 'docker build -t %LOCAL_IMAGE% .'
                 bat 'docker tag %LOCAL_IMAGE% %DOCKER_IMAGE%'
             }
@@ -50,14 +45,8 @@ pipeline {
                 ]) {
                     bat '''
                         @echo off
-                        if "%DOCKERHUB_USER%"=="" (
-                            echo ERROR: Docker Hub username is empty.
-                            exit /b 1
-                        )
-                        if "%DOCKERHUB_TOKEN%"=="" (
-                            echo ERROR: Docker Hub token is empty.
-                            exit /b 1
-                        )
+                        if "%DOCKERHUB_USER%"=="" exit /b 1
+                        if "%DOCKERHUB_TOKEN%"=="" exit /b 1
                         echo Docker Hub credentials are available.
                     '''
                 }
@@ -75,19 +64,49 @@ pipeline {
                 ]) {
                     bat '''
                         @echo off
-                        echo Logging in to Docker Hub...
-
                         docker logout
+                        echo %DOCKERHUB_TOKEN% | docker login --username "%DOCKERHUB_USER%" --password-stdin
                         if errorlevel 1 exit /b 1
+                        docker push %DOCKER_IMAGE%
+                        if errorlevel 1 exit /b 1
+                        docker logout
+                    '''
+                }
+            }
+        }
 
-                        echo %DOCKERHUB_TOKEN% | docker login ^
-                            --username "%DOCKERHUB_USER%" ^
-                            --password-stdin
+        stage('Deploy Container') {
+            steps {
+                bat '''
+                    @echo off
+                    docker rm -f %CONTAINER_NAME% 2>NUL
+                    docker run -d --name %CONTAINER_NAME% --restart unless-stopped -p 3002:3000 %DOCKER_IMAGE%
+                    if errorlevel 1 exit /b 1
+                '''
+            }
+        }
 
-                        if errorlevel 1 (
-                            echo Docker Hub login failed.
-                            exit /b 1
-                        )
+        stage('Verify Deployment') {
+            steps {
+                bat '''
+                    @echo off
+                    docker ps --filter "name=%CONTAINER_NAME%"
+                    echo Website: http://localhost:3002
+                    echo Health endpoint: http://localhost:3002/health
+                '''
+            }
+        }
+    }
 
-                        echo Pushing CloudNova image...
-                        docker push
+    post {
+        success {
+            echo 'CloudNova pipeline completed successfully.'
+        }
+        failure {
+            echo 'CloudNova pipeline failed. Check Console Output.'
+        }
+        always {
+            echo 'CloudNova CI/CD pipeline finished.'
+        }
+    }
+}
