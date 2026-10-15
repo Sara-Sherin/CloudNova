@@ -25,6 +25,21 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 bat 'docker build -t cloudnova:1.0 .'
+                bat 'docker tag cloudnova:1.0 sara567/cloudnova:1.0'
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-creds',
+                    usernameVariable: 'DOCKERHUB_USER',
+                    passwordVariable: 'DOCKERHUB_TOKEN'
+                )]) {
+                    bat 'echo %DOCKERHUB_TOKEN% | docker login -u %DOCKERHUB_USER% --password-stdin'
+                    bat 'docker push sara567/cloudnova:1.0'
+                    bat 'docker logout'
+                }
             }
         }
 
@@ -38,10 +53,10 @@ pipeline {
 
     post {
         success {
-            echo 'CloudNova pipeline completed successfully!'
+            echo 'CloudNova CI/CD pipeline completed successfully!'
         }
         failure {
-            echo 'CloudNova pipeline failed. Check the console output.'
+            echo 'CloudNova pipeline failed. Check the Console Output.'
         }
     }
 }
